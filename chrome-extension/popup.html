@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MultiBlog 설정</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        width: 300px;
+        padding: 16px;
+      }
+      h1 {
+        margin: 0 0 12px;
+        font-size: 16px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        color: #555;
+        margin-bottom: 4px;
+      }
+      input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 13px;
+        box-sizing: border-box;
+        margin-bottom: 10px;
+      }
+      button {
+        width: 100%;
+        padding: 10px;
+        background: #2563eb;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .status {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #16a34a;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>MultiBlog 설정</h1>
+    <label>서버 URL</label>
+    <input id="serverUrl" placeholder="http://localhost:3000" />
+    <label>Webhook Secret</label>
+    <input id="webhookSecret" type="password" placeholder="서버 .env의 값" />
+    <button id="saveBtn">저장</button>
+    <div id="status" class="status"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,106 @@
+// MultiBlog — 네이버 블로그 멀티 플랫폼 배포 시스템
+// 데이터 모델: 원본 포스트 → AI 리라이트 → 플랫폼별 배포
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Platform {
+  WORDPRESS
+  BLOGSPOT
+  TISTORY
+}
+
+enum PublishStatus {
+  PENDING // 대기
+  PROCESSING // 가공/업로드 중
+  SUCCESS // 완료
+  FAILED // 실패
+}
+
+// 네이버 원본 포스트 (크롬 확장프로그램에서 캡처)
+model SourcePost {
+  id             String   @id @default(cuid())
+  naverUrl       String   @unique // 네이버 블로그 URL
+  naverBlogId    String // 네이버 블로그 ID
+  naverLogNo     String // 네이버 로그 번호
+  title          String
+  contentHtml    String   @db.Text // 원본 HTML 본문
+  contentText    String?  @db.Text // 텍스트만 추출 (AI 입력용)
+  images         String[] // 원본 이미지 URL 목록
+  tags           String[] // 태그
+  capturedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  rewrites  RewrittenVersion[]
+  publishes PublishTarget[]
+
+  @@index([naverBlogId])
+  @@map("source_posts")
+}
+
+// AI 리라이트 결과 (플랫폼마다 다른 버전 저장 가능)
+model RewrittenVersion {
+  id          String   @id @default(cuid())
+  sourcePostId String
+  sourcePost  SourcePost @relation(fields: [sourcePostId], references: [id], onDelete: Cascade)
+  platform    Platform // 대상 플랫폼별로 다른 톤 가능
+  title       String
+  contentHtml String   @db.Text
+  metaDescription String?
+  slug        String? // URL slug
+  images      Json // 가공된 이미지 메타 [{original, processed, alt}]
+  model       String // 사용한 AI 모델 (예: claude-opus-4-6)
+  promptVersion String @default("v1")
+  createdAt   DateTime @default(now())
+
+  @@index([sourcePostId])
+  @@map("rewritten_versions")
+}
+
+// 플랫폼별 배포 작업
+model PublishTarget {
+  id             String        @id @default(cuid())
+  sourcePostId   String
+  sourcePost     SourcePost    @relation(fields: [sourcePostId], references: [id], onDelete: Cascade)
+  platformConfigId String
+  platformConfig PlatformConfig @relation(fields: [platformConfigId], references: [id])
+  platform       Platform
+  status         PublishStatus @default(PENDING)
+  publishedUrl   String? // 배포 성공 시 URL
+  publishedId    String? // 플랫폼의 포스트 ID
+  errorMessage   String?       @db.Text
+  attempts       Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  publishedAt    DateTime?
+
+  @@index([sourcePostId])
+  @@index([status])
+  @@map("publish_targets")
+}
+
+// 플랫폼 계정/설정 (여러 WordPress 사이트 등록 가능)
+model PlatformConfig {
+  id           String   @id @default(cuid())
+  platform     Platform
+  name         String // 사용자가 붙이는 별칭
+  siteUrl      String // https://example.com
+  username     String?
+  apiKey       String? // WordPress Application Password, Blogger access token 등
+  refreshToken String? // OAuth refresh (Blogspot)
+  extra        Json? // 플랫폼별 추가 설정
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  publishes PublishTarget[]
+
+  @@map("platform_configs")
+}

@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "MultiBlog Capture",
+  "version": "0.1.0",
+  "description": "네이버 블로그 포스팅을 MultiBlog 서버로 전송합니다.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://blog.naver.com/*",
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "MultiBlog Capture"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://blog.naver.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
