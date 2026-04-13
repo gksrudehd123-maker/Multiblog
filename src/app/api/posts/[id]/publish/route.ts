@@ -17,9 +17,14 @@ export async function POST(
   { params }: { params: { id: string } },
 ) {
   const body = await req.json();
-  const { platformConfigId, status = "draft" } = body as {
+  const {
+    platformConfigId,
+    status = "draft",
+    promptTemplateId,
+  } = body as {
     platformConfigId: string;
     status?: "draft" | "publish";
+    promptTemplateId?: string;
   };
 
   if (!platformConfigId) {
@@ -61,14 +66,25 @@ export async function POST(
   });
 
   try {
-    // 1. Claude 리라이트 (이미지 URL 전달 → 본문 흐름에 <img> 삽입)
-    const configExtra = (config.extra || {}) as { promptTemplate?: string };
+    // 1. Claude 리라이트 (프롬프트 우선순위: body.promptTemplateId > config.extra.promptTemplate > 기본)
+    let customPrompt: string | undefined;
+    if (promptTemplateId) {
+      const tpl = await prisma.promptTemplate.findUnique({
+        where: { id: promptTemplateId },
+      });
+      customPrompt = tpl?.body;
+    }
+    if (!customPrompt) {
+      const configExtra = (config.extra || {}) as { promptTemplate?: string };
+      customPrompt = configExtra.promptTemplate;
+    }
+
     const rewritten = await rewritePost({
       title: source.title,
       contentText: source.contentText || source.contentHtml,
       platform: config.platform as "WORDPRESS" | "BLOGSPOT" | "TISTORY",
       imageUrls: source.images,
-      customPrompt: configExtra.promptTemplate,
+      customPrompt,
     });
 
     // 2. 이미지 가공 + 플랫폼별 업로드

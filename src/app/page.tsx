@@ -70,6 +70,12 @@ export default function Home() {
           </div>
           <nav className="flex gap-2">
             <Link
+              href="/prompts"
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-100"
+            >
+              프롬프트
+            </Link>
+            <Link
               href="/platforms"
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-100"
             >

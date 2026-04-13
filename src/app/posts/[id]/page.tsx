@@ -59,7 +59,11 @@ export default function PostDetailPage() {
   const router = useRouter();
   const [post, setPost] = useState<PostDetail | null>(null);
   const [configs, setConfigs] = useState<Config[]>([]);
+  const [prompts, setPrompts] = useState<
+    { id: string; name: string; description: string | null }[]
+  >([]);
   const [selectedConfigId, setSelectedConfigId] = useState("");
+  const [selectedPromptId, setSelectedPromptId] = useState("");
   const [publishStatus, setPublishStatus] = useState<"draft" | "publish">(
     "draft",
   );
@@ -68,15 +72,18 @@ export default function PostDetailPage() {
 
   const load = useCallback(async () => {
     try {
-      const [pRes, cRes] = await Promise.all([
+      const [pRes, cRes, tRes] = await Promise.all([
         fetch(`/api/posts/${params.id}`),
         fetch("/api/platform-configs"),
+        fetch("/api/prompt-templates"),
       ]);
       const pJson = await pRes.json();
       const cJson = await cRes.json();
+      const tJson = await tRes.json();
       if (!pJson.ok) throw new Error(pJson.error);
       setPost(pJson.data);
       setConfigs((cJson.data || []).filter((c: Config) => c.isActive));
+      setPrompts(tJson.data || []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -100,6 +107,7 @@ export default function PostDetailPage() {
         body: JSON.stringify({
           platformConfigId: selectedConfigId,
           status: publishStatus,
+          promptTemplateId: selectedPromptId || undefined,
         }),
       });
       const json = await res.json();
@@ -208,6 +216,23 @@ export default function PostDetailPage() {
                   {configs.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name} ({c.platform})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-600">
+                  프롬프트
+                </label>
+                <select
+                  value={selectedPromptId}
+                  onChange={(e) => setSelectedPromptId(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">기본 프롬프트</option>
+                  {prompts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
                     </option>
                   ))}
                 </select>
