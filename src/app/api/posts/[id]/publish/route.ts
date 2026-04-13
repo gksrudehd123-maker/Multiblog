@@ -126,6 +126,34 @@ export async function POST(
           });
         }
       }
+    } else if (config.platform === "BLOGSPOT") {
+      // Blogspot은 이미지 업로드 API 없음 → 원본을 다운받아 base64로 본문 인라인
+      for (let i = 0; i < source.images.length; i += 1) {
+        const imgUrl = source.images[i];
+        try {
+          const r = await fetch(imgUrl, {
+            headers: {
+              Referer: "https://blog.naver.com/",
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
+            },
+          });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const buf = Buffer.from(await r.arrayBuffer());
+          const mime = r.headers.get("content-type") || "image/jpeg";
+          const dataUri = `data:${mime};base64,${buf.toString("base64")}`;
+          processedImages.push({
+            original: imgUrl,
+            uploadedUrl: "(inline base64)",
+          });
+          finalHtml = finalHtml.replaceAll(imgUrl, dataUri);
+        } catch (e) {
+          processedImages.push({
+            original: imgUrl,
+            alt: `이미지 다운로드 실패: ${e instanceof Error ? e.message : String(e)}`,
+          });
+        }
+      }
     }
 
     // 3. RewrittenVersion 저장
