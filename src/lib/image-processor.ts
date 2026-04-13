@@ -24,7 +24,13 @@ export async function processImage(
     resizeScale = 0.97,
   } = options;
 
-  const res = await fetch(imageUrl);
+  const res = await fetch(imageUrl, {
+    headers: {
+      Referer: "https://blog.naver.com/",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    },
+  });
   if (!res.ok) {
     throw new Error(`이미지 다운로드 실패: ${res.status}`);
   }

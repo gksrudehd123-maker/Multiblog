@@ -61,11 +61,12 @@ export async function POST(
   });
 
   try {
-    // 1. Claude 리라이트
+    // 1. Claude 리라이트 (이미지 URL 전달 → 본문 흐름에 <img> 삽입)
     const rewritten = await rewritePost({
       title: source.title,
       contentText: source.contentText || source.contentHtml,
       platform: config.platform as "WORDPRESS" | "BLOGSPOT" | "TISTORY",
+      imageUrls: source.images,
     });
 
     // 2. 이미지 가공 + 플랫폼별 업로드
