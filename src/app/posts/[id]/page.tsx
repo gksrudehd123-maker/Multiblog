@@ -291,9 +291,8 @@ export default function PostDetailPage() {
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={src}
+                    src={`/api/proxy-image?url=${encodeURIComponent(src)}`}
                     alt={`이미지 ${i + 1}`}
-                    referrerPolicy="no-referrer"
                     className="h-32 w-full object-cover transition-transform group-hover:scale-105"
                   />
                 </a>
