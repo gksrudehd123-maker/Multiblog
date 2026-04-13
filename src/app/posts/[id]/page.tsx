@@ -275,6 +275,33 @@ export default function PostDetailPage() {
           )}
         </section>
 
+        {post.images.length > 0 && (
+          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="mb-3 font-semibold">
+              🖼️ 원본 이미지 ({post.images.length})
+            </h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {post.images.map((src, i) => (
+                <a
+                  key={i}
+                  href={src}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group block overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt={`이미지 ${i + 1}`}
+                    referrerPolicy="no-referrer"
+                    className="h-32 w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-3 font-semibold">📝 원본 본문</h2>
           <div
