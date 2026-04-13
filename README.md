@@ -26,19 +26,27 @@
 multiblog/
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                           # 대시보드 랜딩
+│   │   ├── page.tsx                           # 대시보드 — 수집된 포스트 목록
+│   │   ├── posts/[id]/page.tsx                # 포스트 상세 + 배포 실행/이력
+│   │   ├── platforms/page.tsx                 # 플랫폼 계정 CRUD
 │   │   └── api/
-│   │       └── webhook/naver-post/route.ts    # 확장프로그램 수신 엔드포인트
+│   │       ├── webhook/naver-post/route.ts    # 확장프로그램 수신 엔드포인트
+│   │       ├── posts/route.ts                 # 포스트 목록
+│   │       ├── posts/[id]/route.ts            # 포스트 상세/삭제
+│   │       ├── posts/[id]/publish/route.ts    # 배포 파이프라인 (리라이트+업로드)
+│   │       ├── platform-configs/route.ts      # 플랫폼 계정 목록/생성
+│   │       └── platform-configs/[id]/route.ts # 플랫폼 계정 수정/삭제
 │   └── lib/
 │       ├── prisma.ts                          # Prisma 클라이언트 싱글턴
 │       ├── claude.ts                          # Anthropic SDK + 리라이트 프롬프트
 │       ├── image-processor.ts                 # sharp 기반 이미지 색상/크기 가공
 │       └── platforms/
-│           ├── wordpress.ts                   # WordPress REST API 어댑터 (완성)
-│           ├── blogspot.ts                    # Blogger v3 API 어댑터 (기본)
+│           ├── wordpress.ts                   # WordPress REST API 어댑터 ✅
+│           ├── blogspot.ts                    # Blogger v3 + OAuth refresh ✅
 │           └── tistory.ts                     # Phase 4 스텁 (Playwright 필요)
 ├── prisma/
-│   └── schema.prisma                          # 4개 모델
+│   ├── schema.prisma                          # 4개 모델
+│   └── migrations/                            # 초기 마이그레이션 포함
 ├── chrome-extension/                          # MV3 크롬 확장프로그램 (Phase 1 내 분리 예정)
 │   ├── manifest.json
 │   ├── content.js                             # 네이버 블로그 본문 파싱 + 버튼 주입
@@ -48,6 +56,20 @@ multiblog/
 ├── .env.example
 └── README.md
 ```
+
+## 배포 파이프라인
+
+`POST /api/posts/:id/publish` 요청 시 다음 순서로 처리됩니다:
+
+1. `PublishTarget` 레코드 `PROCESSING` 상태로 생성
+2. Claude로 플랫폼별 리라이트 (제목/본문HTML/메타/slug)
+3. 원본 이미지 다운로드 → sharp로 색상/리사이즈 가공 → 플랫폼에 업로드 (WordPress만 지원, Blogspot은 원본 URL 유지)
+4. 본문 HTML의 원본 이미지 URL을 업로드 URL로 치환
+5. `RewrittenVersion` 저장
+6. 플랫폼 어댑터(`wpCreatePost` / `bsCreatePost`) 호출 → 초안 또는 즉시 발행
+7. `PublishTarget` `SUCCESS` + `publishedUrl` 저장. 실패 시 `FAILED` + `errorMessage`
+
+Blogspot의 경우 `apiKey`(access token)가 만료되었으면 `refreshToken`으로 자동 갱신하고 DB에 새 값을 저장합니다.
 
 ## 데이터 모델 (Prisma)
 
@@ -60,29 +82,30 @@ multiblog/
 
 ## 로드맵
 
-### Phase 1 — MVP (진행 중)
+### Phase 1 — MVP ✅ (2026-04-13 현재)
 
 - [x] Next.js 14 + TypeScript + Tailwind 스캐폴드
-- [x] Prisma 스키마 (`SourcePost`, `RewrittenVersion`, `PublishTarget`, `PlatformConfig`)
+- [x] Prisma 스키마 + Neon Postgres(Singapore) 연결, 초기 마이그레이션 적용
 - [x] Claude 리라이트 모듈 (`src/lib/claude.ts`)
 - [x] sharp 이미지 가공 모듈 (`src/lib/image-processor.ts`)
 - [x] WordPress REST 어댑터 (`src/lib/platforms/wordpress.ts`)
-- [x] Blogspot Blogger v3 어댑터 (`src/lib/platforms/blogspot.ts`)
+- [x] Blogspot Blogger v3 어댑터 + OAuth refresh (`src/lib/platforms/blogspot.ts`)
 - [x] 크롬 확장프로그램용 웹훅 (`POST /api/webhook/naver-post`)
 - [x] 크롬 확장프로그램 뼈대 (content/background/popup)
-- [ ] **Supabase Postgres 연결** + 첫 마이그레이션 ← **다음 작업**
-- [ ] **`.env.local`에 ANTHROPIC_API_KEY / WEBHOOK_SECRET 세팅** ← **다음 작업**
+- [x] **대시보드 UI** — 포스트 목록(`/`), 포스트 상세(`/posts/:id`), 플랫폼 계정 관리(`/platforms`)
+- [x] **배포 파이프라인 API** (`POST /api/posts/:id/publish`) — Claude 리라이트 → 이미지 가공/업로드 → 플랫폼 업로드 → PublishTarget 상태 기록
+- [x] 플랫폼 CRUD API (`GET/POST /api/platform-configs`, `PATCH/DELETE /api/platform-configs/:id`)
+- [x] **WordPress E2E 검증 완료** — Claude 리라이트 후 실제 WP 초안 생성 성공
 - [ ] 크롬 확장프로그램 content.js 셀렉터를 실제 네이버 블로그 DOM에 맞게 조정
-- [ ] 대시보드: 포스팅 목록 / 배포 상태 / 플랫폼 계정 관리 UI
-- [ ] 배포 파이프라인 API (`POST /api/posts/:id/publish`)
-- [ ] WordPress 실제 테스트 블로그로 E2E 검증
+- [ ] Vercel 배포 + 환경변수 등록
 - [ ] **크롬 확장프로그램을 `multiblog-extension` 별도 저장소로 분리**
 
-### Phase 2 — Blogspot
+### Phase 2 — Blogspot 완성
 
-- [ ] Google OAuth 플로우 (access token + refresh token)
+- [x] Blogspot 어댑터 + Blog ID/Refresh Token UI + 토큰 자동 갱신
+- [ ] **Google OAuth 자체 플로우** — 서버 자체 OAuth 로그인 + 콜백 라우트로 refresh token 획득 (현재는 외부에서 발급한 토큰 직접 입력 필요)
 - [ ] 이미지 호스팅 (Blogger API에 이미지 업로드 엔드포인트가 없음 → Cloudinary / R2 / 자체 호스팅 결정)
-- [ ] Blogspot E2E 테스트
+- [ ] Blogspot E2E 테스트 (토큰 발급 후)
 
 ### Phase 3 — 이미지 가공 강화
 
@@ -113,8 +136,9 @@ multiblog/
 - **pnpm** (`npm install -g pnpm`)
 - **Git**
 - **GitHub 계정** (이 저장소를 clone 받기 위해)
-- **Supabase 계정** (무료) — [supabase.com](https://supabase.com)
+- **Postgres DB 계정** — [Neon](https://neon.tech) (권장, 무료) 또는 [Supabase](https://supabase.com)
 - **Anthropic API 계정** — [console.anthropic.com](https://console.anthropic.com)
+- (Blogspot 사용 시) **Google Cloud OAuth 클라이언트** — Blogger API 활성화 + OAuth 2.0 Client ID/Secret
 
 ### 1단계: 저장소 Clone + 패키지 설치
 
@@ -126,15 +150,21 @@ pnpm install
 
 > 설치 중 `Ignored build scripts` 경고가 나오면 `pnpm approve-builds` 실행 후 `@prisma/client, @prisma/engines, prisma, sharp` 모두 스페이스로 선택 후 Enter. (이 저장소는 `package.json`의 `pnpm.onlyBuiltDependencies`에 미리 등록돼있어 자동 처리됨)
 
-### 2단계: Supabase Postgres 프로젝트 만들기
+### 2단계: Postgres DB 프로젝트 만들기
 
-1. [supabase.com](https://supabase.com) 로그인 → **New Project**
-2. 프로젝트 이름: `multiblog` (아무거나 OK)
-3. Region: **Seoul (ap-northeast-2)** 권장
-4. Database Password: **안전한 비밀번호 생성 후 저장** (나중에 필요)
-5. 프로젝트 생성 후 **Project Settings → Database → Connection string** 에서 2개 URL 복사:
-   - **Transaction mode** (`?pgbouncer=true&connection_limit=1`) → `DATABASE_URL`
-   - **Session mode / Direct connection** → `DIRECT_URL`
+**Neon (권장)**
+
+1. [neon.tech](https://neon.tech) 로그인 → **New Project**
+2. Region: `AWS Asia Pacific (Singapore)` — Seoul/Tokyo가 없으면 Singapore가 한국에서 가장 빠름
+3. 생성 후 **Connection Details**의 connection string 복사
+4. `.env.local`의 `DATABASE_URL`과 `DIRECT_URL` **둘 다 동일한 direct URL** 사용 (Neon의 `-pooler` 엔드포인트는 선택 사항이며 이 프로젝트에서는 direct URL로 통일)
+
+**Supabase (대안)**
+
+1. [supabase.com](https://supabase.com) → New Project → Region `Seoul` → DB 비밀번호 저장
+2. Project Settings → Database → Connection string에서:
+   - Transaction mode (`pgbouncer=true`) → `DATABASE_URL`
+   - Session/Direct → `DIRECT_URL`
 
 ### 3단계: Anthropic API Key 발급
 
@@ -148,21 +178,27 @@ pnpm install
 `.env.local` 파일을 프로젝트 루트에 만들고 아래 내용 채우기:
 
 ```env
-# Supabase Postgres (2단계에서 복사한 값)
-DATABASE_URL="postgresql://postgres.xxxxx:PASSWORD@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres?pgbouncer=true&connection_limit=1"
-DIRECT_URL="postgresql://postgres.xxxxx:PASSWORD@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres"
+# Postgres (Neon/Supabase)
+DATABASE_URL="postgresql://user:password@host/db?sslmode=require"
+DIRECT_URL="postgresql://user:password@host/db?sslmode=require"
 
-# Anthropic (3단계에서 복사한 값)
+# Anthropic
 ANTHROPIC_API_KEY="sk-ant-..."
 CLAUDE_MODEL="claude-opus-4-6"
 
-# 크롬 확장프로그램 인증용 (아무 랜덤 문자열 — 확장프로그램 popup에도 동일하게 입력)
-WEBHOOK_SECRET="openssl rand -hex 32 로 생성한 값 또는 아무 문자열"
+# Google OAuth (Blogspot access token refresh)
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
 
-# NextAuth (추후 사용자 로그인 기능 붙일 때)
+# 크롬 확장프로그램 인증용 (아무 랜덤 문자열)
+WEBHOOK_SECRET="openssl rand -hex 32 로 생성"
+
+# NextAuth (추후 사용자 로그인 기능)
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="openssl rand -base64 32 로 생성"
 ```
+
+> **참고**: Prisma CLI는 `.env`만 읽고 Next.js는 `.env.local`을 읽습니다. 같은 값을 두 파일에 모두 두거나 `.env.local`만 편집한 뒤 `cp .env.local .env`로 동기화하세요.
 
 ### 5단계: Prisma 마이그레이션 (DB 테이블 생성)
 
@@ -213,15 +249,17 @@ curl -X POST http://localhost:3000/api/webhook/naver-post \
 
 ## 환경변수 요약
 
-| 변수                | 설명                                          | 필수 |
-| ------------------- | --------------------------------------------- | ---- |
-| `DATABASE_URL`      | Supabase Postgres pooler URL                  | ✅   |
-| `DIRECT_URL`        | Supabase Postgres direct URL (마이그레이션용) | ✅   |
-| `ANTHROPIC_API_KEY` | Claude API 키                                 | ✅   |
-| `CLAUDE_MODEL`      | 사용할 Claude 모델 (기본 `claude-opus-4-6`)   | ❌   |
-| `WEBHOOK_SECRET`    | 확장프로그램 인증용 랜덤 문자열               | ✅   |
-| `NEXTAUTH_URL`      | 추후 인증 붙일 때                             | ❌   |
-| `NEXTAUTH_SECRET`   | 추후 인증 붙일 때                             | ❌   |
+| 변수                   | 설명                                          | 필수 |
+| ---------------------- | --------------------------------------------- | ---- |
+| `DATABASE_URL`         | Supabase Postgres pooler URL                  | ✅   |
+| `DIRECT_URL`           | Supabase Postgres direct URL (마이그레이션용) | ✅   |
+| `ANTHROPIC_API_KEY`    | Claude API 키                                 | ✅   |
+| `CLAUDE_MODEL`         | 사용할 Claude 모델 (기본 `claude-opus-4-6`)   | ❌   |
+| `WEBHOOK_SECRET`       | 확장프로그램 인증용 랜덤 문자열               | ✅   |
+| `GOOGLE_CLIENT_ID`     | Blogspot OAuth refresh (Blogger 사용 시)      | ⚠️   |
+| `GOOGLE_CLIENT_SECRET` | Blogspot OAuth refresh (Blogger 사용 시)      | ⚠️   |
+| `NEXTAUTH_URL`         | 추후 인증 붙일 때                             | ❌   |
+| `NEXTAUTH_SECRET`      | 추후 인증 붙일 때                             | ❌   |
 
 ## 배포
 
