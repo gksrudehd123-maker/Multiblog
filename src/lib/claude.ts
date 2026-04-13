@@ -44,7 +44,7 @@ export async function rewritePost(input: RewriteInput): Promise<RewriteOutput> {
 
   const response = await anthropic.messages.create({
     model: CLAUDE_MODEL,
-    max_tokens: 4096,
+    max_tokens: 16000,
     system: systemPrompt,
     messages: [
       {
@@ -63,10 +63,29 @@ export async function rewritePost(input: RewriteInput): Promise<RewriteOutput> {
     throw new Error("Claude 응답에 텍스트가 없습니다");
   }
 
-  const match = textBlock.text.match(/\{[\s\S]*\}/);
-  if (!match) {
-    throw new Error("Claude 응답에서 JSON을 추출할 수 없습니다");
+  // JSON 블록 추출 — 코드펜스 제거 후 첫 { 부터 마지막 } 까지
+  const cleaned = textBlock.text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/, "")
+    .replace(/```\s*$/, "")
+    .trim();
+  const first = cleaned.indexOf("{");
+  const last = cleaned.lastIndexOf("}");
+  if (first === -1 || last === -1 || last <= first) {
+    console.error("[claude] 원본 응답:", textBlock.text.slice(0, 500));
+    throw new Error(
+      `Claude 응답에서 JSON을 추출할 수 없습니다 (stop_reason=${response.stop_reason})`,
+    );
   }
-
-  return JSON.parse(match[0]) as RewriteOutput;
+  try {
+    return JSON.parse(cleaned.slice(first, last + 1)) as RewriteOutput;
+  } catch (e) {
+    console.error(
+      "[claude] JSON 파싱 실패. 원본 일부:",
+      textBlock.text.slice(0, 1000),
+    );
+    throw new Error(
+      `Claude JSON 파싱 실패: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
