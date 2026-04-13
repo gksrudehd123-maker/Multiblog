@@ -129,6 +129,21 @@ export default function PostDetailPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 p-8">
+      {publishing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-4 rounded-2xl bg-white px-10 py-8 shadow-2xl">
+            <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+            <div className="text-center">
+              <p className="text-base font-semibold text-slate-900">
+                Claude 리라이트 + 이미지 가공 + 업로드 중
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                이미지 개수에 따라 30초~1분 걸립니다. 창을 닫지 마세요.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="mx-auto max-w-5xl space-y-6">
         <div>
           <Link
