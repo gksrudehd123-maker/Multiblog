@@ -6,6 +6,10 @@ import {
   createPost as wpCreatePost,
   uploadMedia as wpUploadMedia,
 } from "@/lib/platforms/wordpress";
+import {
+  createPost as bsCreatePost,
+  refreshAccessToken as bsRefreshToken,
+} from "@/lib/platforms/blogspot";
 export const maxDuration = 300;
 
 export async function POST(
@@ -140,6 +144,53 @@ export async function POST(
       );
       publishedUrl = created.link;
       publishedId = String(created.id);
+    } else if (config.platform === "BLOGSPOT") {
+      const extra = (config.extra || {}) as {
+        blogId?: string;
+        expiryDate?: number;
+        labels?: string;
+      };
+      if (!extra.blogId) {
+        throw new Error("Blogspot: extra.blogId 설정이 필요합니다");
+      }
+
+      // accessToken 만료 확인 → 필요 시 refresh
+      let accessToken = config.apiKey || "";
+      const now = Date.now();
+      const expired = !extra.expiryDate || extra.expiryDate - 60000 < now;
+      if (expired) {
+        if (!config.refreshToken) {
+          throw new Error("Blogspot: refreshToken이 없어 갱신 불가");
+        }
+        const refreshed = await bsRefreshToken(config.refreshToken);
+        accessToken = refreshed.accessToken;
+        await prisma.platformConfig.update({
+          where: { id: config.id },
+          data: {
+            apiKey: refreshed.accessToken,
+            extra: { ...extra, expiryDate: refreshed.expiryDate },
+          },
+        });
+      }
+
+      const labels = extra.labels
+        ? extra.labels
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : undefined;
+
+      const created = await bsCreatePost(
+        { blogId: extra.blogId, accessToken },
+        {
+          title: rewritten.title,
+          content: finalHtml,
+          labels,
+          isDraft: status === "draft",
+        },
+      );
+      publishedUrl = created.url;
+      publishedId = created.id;
     } else {
       throw new Error(`${config.platform} 플랫폼은 아직 구현되지 않았습니다`);
     }
