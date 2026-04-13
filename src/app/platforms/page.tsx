@@ -105,8 +105,15 @@ export default function PlatformsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("삭제할까요?")) return;
-    await fetch(`/api/platform-configs/${id}`, { method: "DELETE" });
+    if (!confirm("삭제할까요? 관련 배포 이력도 함께 삭제됩니다.")) return;
+    const res = await fetch(`/api/platform-configs/${id}`, {
+      method: "DELETE",
+    });
+    const json = await res.json();
+    if (!json.ok) {
+      alert("삭제 실패: " + json.error);
+      return;
+    }
     load();
   };
 

@@ -5,8 +5,20 @@ export async function DELETE(
   _req: Request,
   { params }: { params: { id: string } },
 ) {
-  await prisma.platformConfig.delete({ where: { id: params.id } });
-  return NextResponse.json({ ok: true });
+  try {
+    // FK: PublishTarget이 남아있으면 삭제 실패하므로 먼저 제거
+    await prisma.publishTarget.deleteMany({
+      where: { platformConfigId: params.id },
+    });
+    await prisma.platformConfig.delete({ where: { id: params.id } });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("PlatformConfig delete error:", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
+  }
 }
 
 export async function PATCH(
