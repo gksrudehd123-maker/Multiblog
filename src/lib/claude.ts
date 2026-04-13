@@ -11,6 +11,7 @@ export type RewriteInput = {
   contentText: string;
   platform: "WORDPRESS" | "BLOGSPOT" | "TISTORY";
   imageUrls?: string[]; // 본문에 배치할 이미지 URL (순서 보존)
+  customPrompt?: string; // 커스텀 시스템 프롬프트 ({PLATFORM} 치환 지원)
 };
 
 export type RewriteOutput = {
@@ -39,8 +40,11 @@ JSON 형식으로만 응답 (다른 텍스트 금지):
 }
 `;
 
+export const DEFAULT_REWRITE_PROMPT = REWRITE_PROMPT;
+
 export async function rewritePost(input: RewriteInput): Promise<RewriteOutput> {
-  const systemPrompt = REWRITE_PROMPT.replace("{PLATFORM}", input.platform);
+  const basePrompt = input.customPrompt?.trim() || REWRITE_PROMPT;
+  const systemPrompt = basePrompt.replace(/\{PLATFORM\}/g, input.platform);
 
   const response = await anthropic.messages.create({
     model: CLAUDE_MODEL,

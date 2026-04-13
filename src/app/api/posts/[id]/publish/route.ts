@@ -62,11 +62,13 @@ export async function POST(
 
   try {
     // 1. Claude 리라이트 (이미지 URL 전달 → 본문 흐름에 <img> 삽입)
+    const configExtra = (config.extra || {}) as { promptTemplate?: string };
     const rewritten = await rewritePost({
       title: source.title,
       contentText: source.contentText || source.contentHtml,
       platform: config.platform as "WORDPRESS" | "BLOGSPOT" | "TISTORY",
       imageUrls: source.images,
+      customPrompt: configExtra.promptTemplate,
     });
 
     // 2. 이미지 가공 + 플랫폼별 업로드

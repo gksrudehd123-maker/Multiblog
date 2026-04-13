@@ -12,7 +12,19 @@ type Config = {
   apiKey: string | null;
   isActive: boolean;
   createdAt: string;
+  extra: Record<string, unknown> | null;
 };
+
+const DEFAULT_PROMPT_HINT = `예) 너는 한국어 블로그 콘텐츠 리라이터다. {PLATFORM} 플랫폼에 맞게 재작성한다.
+
+규칙:
+1. 핵심 내용과 사실은 절대 바꾸지 말 것
+2. 표현/문장 구조/어휘는 최대한 바꾸어 SEO 중복 페널티 회피
+3. 본문은 HTML (h2, h3, p, ul, strong)
+4. 이미지 URL 목록이 있으면 본문 흐름에 <img> 삽입
+
+JSON 형식으로만 응답:
+{ "title": "...", "contentHtml": "...", "metaDescription": "...", "slug": "..." }`;
 
 const PLATFORMS = [
   { value: "WORDPRESS", label: "WordPress" },
@@ -22,6 +34,11 @@ const PLATFORMS = [
 
 export default function PlatformsPage() {
   const [configs, setConfigs] = useState<Config[]>([]);
+  const [editingPrompt, setEditingPrompt] = useState<{
+    id: string;
+    value: string;
+  } | null>(null);
+  const [savingPrompt, setSavingPrompt] = useState(false);
   const [form, setForm] = useState({
     platform: "WORDPRESS" as Config["platform"],
     name: "",
@@ -100,6 +117,36 @@ export default function PlatformsPage() {
       body: JSON.stringify({ isActive: !c.isActive }),
     });
     load();
+  };
+
+  const openPromptEditor = (c: Config) => {
+    const existing =
+      (c.extra as { promptTemplate?: string } | null)?.promptTemplate || "";
+    setEditingPrompt({ id: c.id, value: existing });
+  };
+
+  const savePrompt = async () => {
+    if (!editingPrompt) return;
+    setSavingPrompt(true);
+    try {
+      const target = configs.find((c) => c.id === editingPrompt.id);
+      const currentExtra = (target?.extra as Record<string, unknown>) || {};
+      const nextExtra = { ...currentExtra };
+      if (editingPrompt.value.trim()) {
+        nextExtra.promptTemplate = editingPrompt.value;
+      } else {
+        delete nextExtra.promptTemplate;
+      }
+      await fetch(`/api/platform-configs/${editingPrompt.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extra: nextExtra }),
+      });
+      setEditingPrompt(null);
+      load();
+    } finally {
+      setSavingPrompt(false);
+    }
   };
 
   return (
@@ -288,6 +335,17 @@ export default function PlatformsPage() {
                   </div>
                   <div className="flex gap-2">
                     <button
+                      onClick={() => openPromptEditor(c)}
+                      className="rounded-md border border-blue-200 px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                      title="Claude 리라이트 프롬프트 편집"
+                    >
+                      프롬프트
+                      {(c.extra as { promptTemplate?: string } | null)
+                        ?.promptTemplate
+                        ? " ✓"
+                        : ""}
+                    </button>
+                    <button
                       onClick={() => toggleActive(c)}
                       className="rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
                     >
@@ -306,6 +364,77 @@ export default function PlatformsPage() {
           )}
         </section>
       </div>
+
+      {editingPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 p-4">
+              <h3 className="font-semibold">Claude 리라이트 프롬프트</h3>
+              <button
+                onClick={() => setEditingPrompt(null)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <p className="mb-2 text-xs text-slate-600">
+                이 플랫폼으로 배포할 때 Claude에게 전달할 시스템 프롬프트를
+                지정합니다. 비워두면 기본 프롬프트가 사용됩니다.
+                <br />
+                <code className="rounded bg-slate-100 px-1">
+                  {"{PLATFORM}"}
+                </code>
+                는 플랫폼 이름(WORDPRESS/BLOGSPOT/TISTORY)으로 치환됩니다.
+                <br />
+                <strong>
+                  반드시 JSON 형식(title, contentHtml, metaDescription,
+                  slug)으로 응답하도록 지시해야 합니다.
+                </strong>
+              </p>
+              <textarea
+                value={editingPrompt.value}
+                onChange={(e) =>
+                  setEditingPrompt({
+                    ...editingPrompt,
+                    value: e.target.value,
+                  })
+                }
+                rows={16}
+                placeholder={DEFAULT_PROMPT_HINT}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-200 p-4">
+              <button
+                onClick={() => setEditingPrompt(null)}
+                disabled={savingPrompt}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={() =>
+                  setEditingPrompt(
+                    editingPrompt ? { ...editingPrompt, value: "" } : null,
+                  )
+                }
+                disabled={savingPrompt}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50"
+              >
+                기본값으로 초기화
+              </button>
+              <button
+                onClick={savePrompt}
+                disabled={savingPrompt}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingPrompt ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
