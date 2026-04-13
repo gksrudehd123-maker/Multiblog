@@ -127,21 +127,21 @@ export async function POST(
         }
       }
     } else if (config.platform === "BLOGSPOT") {
-      // Blogspot은 이미지 업로드 API 없음 → 원본을 다운받아 base64로 본문 인라인
+      // Blogspot은 이미지 업로드 API 없음 → sharp로 리사이즈/압축 후 base64 인라인
+      // Blogger 포스트 1MB 제한 → 각 이미지 ~80KB 이하 유지
+      const sharp = (await import("sharp")).default;
       for (let i = 0; i < source.images.length; i += 1) {
         const imgUrl = source.images[i];
         try {
-          const r = await fetch(imgUrl, {
-            headers: {
-              Referer: "https://blog.naver.com/",
-              "User-Agent":
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36",
-            },
+          const { buffer } = await processImage(imgUrl, {
+            resizeScale: 1,
           });
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
-          const buf = Buffer.from(await r.arrayBuffer());
-          const mime = r.headers.get("content-type") || "image/jpeg";
-          const dataUri = `data:${mime};base64,${buf.toString("base64")}`;
+          // processImage는 sharp 처리 완료 상태. 추가 압축을 위해 다시 파이프
+          const compressed = await sharp(buffer)
+            .resize({ width: 800, withoutEnlargement: true })
+            .jpeg({ quality: 72, mozjpeg: true })
+            .toBuffer();
+          const dataUri = `data:image/jpeg;base64,${compressed.toString("base64")}`;
           processedImages.push({
             original: imgUrl,
             uploadedUrl: "(inline base64)",
@@ -150,7 +150,7 @@ export async function POST(
         } catch (e) {
           processedImages.push({
             original: imgUrl,
-            alt: `이미지 다운로드 실패: ${e instanceof Error ? e.message : String(e)}`,
+            alt: `이미지 처리 실패: ${e instanceof Error ? e.message : String(e)}`,
           });
         }
       }
