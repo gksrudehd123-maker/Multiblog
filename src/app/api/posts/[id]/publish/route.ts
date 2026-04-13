@@ -1,0 +1,170 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { rewritePost, CLAUDE_MODEL } from "@/lib/claude";
+import { processImage } from "@/lib/image-processor";
+import {
+  createPost as wpCreatePost,
+  uploadMedia as wpUploadMedia,
+} from "@/lib/platforms/wordpress";
+export const maxDuration = 300;
+
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } },
+) {
+  const body = await req.json();
+  const { platformConfigId, status = "draft" } = body as {
+    platformConfigId: string;
+    status?: "draft" | "publish";
+  };
+
+  if (!platformConfigId) {
+    return NextResponse.json(
+      { ok: false, error: "platformConfigId 필수" },
+      { status: 400 },
+    );
+  }
+
+  const source = await prisma.sourcePost.findUnique({
+    where: { id: params.id },
+  });
+  if (!source) {
+    return NextResponse.json(
+      { ok: false, error: "원본 포스트를 찾을 수 없음" },
+      { status: 404 },
+    );
+  }
+
+  const config = await prisma.platformConfig.findUnique({
+    where: { id: platformConfigId },
+  });
+  if (!config || !config.isActive) {
+    return NextResponse.json(
+      { ok: false, error: "플랫폼 설정이 없거나 비활성화됨" },
+      { status: 400 },
+    );
+  }
+
+  // PublishTarget 생성 (PROCESSING 상태)
+  const target = await prisma.publishTarget.create({
+    data: {
+      sourcePostId: source.id,
+      platformConfigId: config.id,
+      platform: config.platform,
+      status: "PROCESSING",
+      attempts: 1,
+    },
+  });
+
+  try {
+    // 1. Claude 리라이트
+    const rewritten = await rewritePost({
+      title: source.title,
+      contentText: source.contentText || source.contentHtml,
+      platform: config.platform as "WORDPRESS" | "BLOGSPOT" | "TISTORY",
+    });
+
+    // 2. 이미지 가공 + 플랫폼별 업로드
+    const processedImages: {
+      original: string;
+      uploadedUrl?: string;
+      uploadedId?: number | string;
+      alt?: string;
+    }[] = [];
+    let finalHtml = rewritten.contentHtml;
+
+    if (config.platform === "WORDPRESS") {
+      for (let idx = 0; idx < source.images.length; idx += 1) {
+        const imgUrl = source.images[idx];
+        try {
+          const { buffer, mimeType } = await processImage(imgUrl);
+          const filename = `img-${Date.now()}-${idx}.jpg`;
+          const uploaded = await wpUploadMedia(
+            {
+              siteUrl: config.siteUrl,
+              username: config.username || "",
+              applicationPassword: config.apiKey || "",
+            },
+            buffer,
+            filename,
+            mimeType,
+          );
+          processedImages.push({
+            original: imgUrl,
+            uploadedUrl: uploaded.source_url,
+            uploadedId: uploaded.id,
+          });
+          // 본문에 원본 URL이 있으면 업로드 URL로 치환
+          finalHtml = finalHtml.replaceAll(imgUrl, uploaded.source_url);
+        } catch (e) {
+          processedImages.push({
+            original: imgUrl,
+            alt: `이미지 처리 실패: ${e instanceof Error ? e.message : String(e)}`,
+          });
+        }
+      }
+    }
+
+    // 3. RewrittenVersion 저장
+    const rv = await prisma.rewrittenVersion.create({
+      data: {
+        sourcePostId: source.id,
+        platform: config.platform,
+        title: rewritten.title,
+        contentHtml: finalHtml,
+        metaDescription: rewritten.metaDescription,
+        slug: rewritten.slug,
+        images: processedImages,
+        model: CLAUDE_MODEL,
+      },
+    });
+
+    // 4. 플랫폼 업로드
+    let publishedUrl: string | null = null;
+    let publishedId: string | null = null;
+
+    if (config.platform === "WORDPRESS") {
+      const created = await wpCreatePost(
+        {
+          siteUrl: config.siteUrl,
+          username: config.username || "",
+          applicationPassword: config.apiKey || "",
+        },
+        {
+          title: rewritten.title,
+          content: finalHtml,
+          slug: rewritten.slug,
+          excerpt: rewritten.metaDescription,
+          status,
+        },
+      );
+      publishedUrl = created.link;
+      publishedId = String(created.id);
+    } else {
+      throw new Error(`${config.platform} 플랫폼은 아직 구현되지 않았습니다`);
+    }
+
+    // 5. 성공 처리
+    const updated = await prisma.publishTarget.update({
+      where: { id: target.id },
+      data: {
+        status: "SUCCESS",
+        publishedUrl,
+        publishedId,
+        publishedAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({
+      ok: true,
+      data: { target: updated, rewrittenVersionId: rv.id },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await prisma.publishTarget.update({
+      where: { id: target.id },
+      data: { status: "FAILED", errorMessage: message },
+    });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
