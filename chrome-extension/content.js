@@ -1,47 +1,90 @@
 // MultiBlog content script — 네이버 블로그 본문 페이지에 "멀티배포" 버튼 주입
-// TODO: 실제 네이버 블로그 DOM 구조에 맞게 셀렉터/파싱 로직 조정 필요
+// 지원 에디터: SmartEditor ONE (.se-* 계열) — 네이버 블로그 기본 에디터
+// 모바일(m.blog.naver.com)은 별도 패턴
 
 (function () {
+  const SELECTORS = {
+    title: [".se-title-text", ".pcol1 .htitle", ".se_title", "h3.se_textarea"],
+    body: [".se-main-container", "#postViewArea", ".se_component_wrap"],
+  };
+
+  function pickFirst(doc, list) {
+    for (const sel of list) {
+      const el = doc.querySelector(sel);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  function getPostDoc() {
+    // 외부 URL(blog.naver.com/:blogId/:logNo) — mainFrame iframe 내부에 본문 렌더됨
+    const frame = document.querySelector("iframe#mainFrame");
+    if (frame && frame.contentDocument) {
+      return frame.contentDocument;
+    }
+    // PostView.nhn 직접 URL 또는 모바일
+    return document;
+  }
+
+  function extractTags(doc, logNo) {
+    // 네이버는 AJAX로 tagList_{logNo} 안에 <a>로 태그 삽입
+    const tagRoot =
+      (logNo && doc.getElementById("tagList_" + logNo)) ||
+      doc.querySelector('[id^="tagList_"]');
+    if (!tagRoot) return [];
+    return Array.from(tagRoot.querySelectorAll("a"))
+      .map((a) => (a.textContent || "").trim().replace(/^#/, ""))
+      .filter((t) => t && !/^태그$/.test(t));
+  }
+
+  function extractImages(container) {
+    return Array.from(container.querySelectorAll("img"))
+      .map((img) => img.getAttribute("data-lazy-src") || img.src)
+      .filter(Boolean)
+      .filter((src) => /^https?:\/\//i.test(src))
+      .filter((src) => !/\/(blank|spacer|pixel|dummy)\.(gif|png)/i.test(src))
+      .filter((src) => !/\/skin\//i.test(src));
+  }
+
   function extractPost() {
-    // 네이버 블로그는 iframe 내부(mainFrame)에 본문이 렌더됨
-    const frame = document.querySelector('iframe#mainFrame');
-    const doc = frame ? frame.contentDocument : document;
+    const doc = getPostDoc();
     if (!doc) return null;
 
-    const title = doc.querySelector('.se-title-text')?.innerText?.trim() ||
-      doc.querySelector('.pcol1 .htitle')?.innerText?.trim() || '';
-    const contentEl =
-      doc.querySelector('.se-main-container') ||
-      doc.querySelector('#postViewArea');
-    const contentHtml = contentEl ? contentEl.innerHTML : '';
-    const contentText = contentEl ? contentEl.innerText : '';
-
-    const images = Array.from(doc.querySelectorAll('.se-main-container img'))
-      .map((img) => img.src)
-      .filter(Boolean);
+    const titleEl = pickFirst(doc, SELECTORS.title);
+    const contentEl = pickFirst(doc, SELECTORS.body);
+    if (!titleEl || !contentEl) return null;
 
     const url = location.href;
-    const match = url.match(/blog\.naver\.com\/([^/]+)\/(\d+)/) ||
+    const match =
+      url.match(/blog\.naver\.com\/([^/?#]+)\/(\d+)/) ||
       url.match(/blogId=([^&]+).*logNo=(\d+)/);
+    const blogId = match ? match[1] : "";
+    const logNo = match ? match[2] : "";
 
     return {
       naverUrl: url,
-      naverBlogId: match ? match[1] : '',
-      naverLogNo: match ? match[2] : '',
-      title,
-      contentHtml,
-      contentText,
-      images,
-      tags: [],
+      naverBlogId: blogId,
+      naverLogNo: logNo,
+      title: (titleEl.innerText || titleEl.textContent || "").trim(),
+      contentHtml: contentEl.innerHTML,
+      contentText: (contentEl.innerText || contentEl.textContent || "").trim(),
+      images: extractImages(contentEl),
+      tags: extractTags(doc, logNo),
     };
   }
 
   function injectButton() {
-    if (document.getElementById('multiblog-send-btn')) return;
+    if (document.getElementById("multiblog-send-btn")) return;
 
-    const btn = document.createElement('button');
-    btn.id = 'multiblog-send-btn';
-    btn.textContent = '📤 MultiBlog 전송';
+    // 본문 로드 확인 (iframe 지연 대응)
+    const preview = extractPost();
+    if (!preview || !preview.title) {
+      return false; // 다시 시도
+    }
+
+    const btn = document.createElement("button");
+    btn.id = "multiblog-send-btn";
+    btn.textContent = "📤 MultiBlog 전송";
     btn.style.cssText = `
       position: fixed;
       bottom: 24px;
@@ -57,30 +100,40 @@
       cursor: pointer;
     `;
 
-    btn.addEventListener('click', async () => {
+    btn.addEventListener("click", async () => {
       const payload = extractPost();
       if (!payload || !payload.title) {
-        alert('본문을 찾지 못했습니다. 블로그 글 상세 페이지에서 눌러주세요.');
+        alert("본문을 찾지 못했습니다. 블로그 글 상세 페이지에서 눌러주세요.");
         return;
       }
       btn.disabled = true;
-      btn.textContent = '전송 중...';
-      chrome.runtime.sendMessage({ type: 'SEND_POST', payload }, (res) => {
+      btn.textContent = "전송 중...";
+      chrome.runtime.sendMessage({ type: "SEND_POST", payload }, (res) => {
         btn.disabled = false;
-        btn.textContent = '📤 MultiBlog 전송';
+        btn.textContent = "📤 MultiBlog 전송";
         if (res && res.ok) {
-          alert('전송 완료!');
+          alert("전송 완료! (제목: " + payload.title + ")");
         } else {
-          alert('전송 실패: ' + (res && res.error));
+          alert("전송 실패: " + (res && res.error));
         }
       });
     });
 
     document.body.appendChild(btn);
+    return true;
   }
 
-  // 블로그 포스트 페이지에서만 주입
-  if (location.href.includes('blog.naver.com')) {
-    setTimeout(injectButton, 1000);
+  // 블로그 포스트 페이지에서만 주입. iframe 로드 대기를 위해 최대 10초간 재시도
+  if (
+    location.hostname === "blog.naver.com" ||
+    location.hostname === "m.blog.naver.com"
+  ) {
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      if (injectButton() || attempts >= 20) {
+        clearInterval(timer);
+      }
+    }, 500);
   }
 })();
