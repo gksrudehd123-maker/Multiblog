@@ -35,6 +35,7 @@ type PostDetail = {
   images: string[];
   tags: string[];
   capturedAt: string;
+  mode: "OWN" | "REFERENCE";
   rewrites: Rewrite[];
   publishes: Publish[];
 };
@@ -163,6 +164,13 @@ export default function PostDetailPage() {
         </div>
 
         <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          {post.mode === "REFERENCE" && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <span className="font-semibold">참고용 포스트</span> — 원본 이미지
+              사용 안 함, 배포 시 자동 draft 저장 (수동 검토 필수). Claude는
+              원본을 리라이트하지 않고 주제만 참고해 새 글을 작성합니다.
+            </div>
+          )}
           <h1 className="text-2xl font-bold">{post.title}</h1>
           <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
             <a

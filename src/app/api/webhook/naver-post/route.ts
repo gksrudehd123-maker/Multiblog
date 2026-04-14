@@ -13,6 +13,7 @@ type WebhookPayload = {
   contentText?: string;
   images?: string[];
   tags?: string[];
+  mode?: "OWN" | "REFERENCE";
 };
 
 export async function POST(request: NextRequest) {
@@ -32,6 +33,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const mode = body.mode === "REFERENCE" ? "REFERENCE" : "OWN";
+
     const post = await prisma.sourcePost.upsert({
       where: { naverUrl: body.naverUrl },
       create: {
@@ -43,6 +46,7 @@ export async function POST(request: NextRequest) {
         contentText: body.contentText || null,
         images: body.images || [],
         tags: body.tags || [],
+        mode,
       },
       update: {
         title: body.title,
@@ -50,6 +54,7 @@ export async function POST(request: NextRequest) {
         contentText: body.contentText || null,
         images: body.images || [],
         tags: body.tags || [],
+        mode,
       },
     });
 

@@ -12,6 +12,7 @@ export type RewriteInput = {
   platform: "WORDPRESS" | "BLOGSPOT" | "TISTORY";
   imageUrls?: string[]; // 본문에 배치할 이미지 URL (순서 보존)
   customPrompt?: string; // 커스텀 시스템 프롬프트 ({PLATFORM} 치환 지원)
+  mode?: "OWN" | "REFERENCE"; // REFERENCE: inspiration 기반 재작성(참고용)
 };
 
 export type RewriteOutput = {
@@ -40,10 +41,37 @@ JSON 형식으로만 응답 (다른 텍스트 금지):
 }
 `;
 
+// REFERENCE 모드: 남의 글을 참고 자료로 삼아 완전히 다른 글 작성
+// - 저작권 이슈 회피: 원문 구조/문장을 따라가지 않음
+// - SEO: 단순 리라이트가 아닌 본인 관점으로 재구성해야 중복 콘텐츠 페널티 회피
+const REFERENCE_PROMPT = `너는 한국어 블로그 콘텐츠 작가다. 제공되는 원본 글은 **참고 자료**일 뿐 리라이트 대상이 아니다. 이 주제에 대해 {PLATFORM}에 올릴 새로운 글을 작성하라.
+
+규칙:
+1. 원본 글의 **주제/핵심 정보만** 참고하고 구조/문장/표현은 **완전히 다르게** 새로 작성
+2. 원본의 단락 순서, 소제목 흐름을 따라가지 말 것 (다른 관점/순서로 재구성)
+3. 원본에 없는 일반적인 배경 지식/맥락/실용 팁을 추가해 독자 가치 높일 것
+4. 사실 관계는 정확히 유지 (왜곡/허위 금지)
+5. 본문은 HTML (h2, h3, p, ul, strong 활용)
+6. 제목은 원본과 전혀 다른 표현으로 (검색 의도만 유지)
+7. 메타 설명 140자 이내, URL slug는 영문 lowercase + hyphen
+8. 이미지 태그는 삽입하지 말 것 (참고용이므로 원본 이미지 사용 불가)
+
+JSON 형식으로만 응답 (다른 텍스트 금지):
+{
+  "title": "...",
+  "contentHtml": "...",
+  "metaDescription": "...",
+  "slug": "..."
+}
+`;
+
 export const DEFAULT_REWRITE_PROMPT = REWRITE_PROMPT;
+export const DEFAULT_REFERENCE_PROMPT = REFERENCE_PROMPT;
 
 export async function rewritePost(input: RewriteInput): Promise<RewriteOutput> {
-  const basePrompt = input.customPrompt?.trim() || REWRITE_PROMPT;
+  const defaultPrompt =
+    input.mode === "REFERENCE" ? REFERENCE_PROMPT : REWRITE_PROMPT;
+  const basePrompt = input.customPrompt?.trim() || defaultPrompt;
   const systemPrompt = basePrompt.replace(/\{PLATFORM\}/g, input.platform);
 
   const response = await anthropic.messages.create({

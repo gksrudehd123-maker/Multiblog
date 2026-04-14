@@ -80,12 +80,17 @@ export async function POST(
       customPrompt = configExtra.promptTemplate;
     }
 
+    // 참고용 모드는 이미지 사용 안 함 + 자동 draft 강제 (수동 검토 필수)
+    const isReference = source.mode === "REFERENCE";
+    const effectiveStatus = isReference ? "draft" : status;
+
     const rewritten = await rewritePost({
       title: source.title,
       contentText: source.contentText || source.contentHtml,
       platform: config.platform as "WORDPRESS" | "BLOGSPOT" | "TISTORY",
-      imageUrls: source.images,
+      imageUrls: isReference ? [] : source.images,
       customPrompt,
+      mode: isReference ? "REFERENCE" : "OWN",
     });
 
     // 2. 이미지 가공 + 플랫폼별 업로드
@@ -97,7 +102,9 @@ export async function POST(
     }[] = [];
     let finalHtml = rewritten.contentHtml;
 
-    if (config.platform === "WORDPRESS") {
+    if (isReference) {
+      // 참고용 모드: 이미지 처리 스킵 (원본 이미지 저작권 사용 불가)
+    } else if (config.platform === "WORDPRESS") {
       for (let idx = 0; idx < source.images.length; idx += 1) {
         const imgUrl = source.images[idx];
         try {
@@ -185,7 +192,7 @@ export async function POST(
           content: finalHtml,
           slug: rewritten.slug,
           excerpt: rewritten.metaDescription,
-          status,
+          status: effectiveStatus,
         },
       );
       publishedUrl = created.link;
@@ -232,7 +239,7 @@ export async function POST(
           title: rewritten.title,
           content: finalHtml,
           labels,
-          isDraft: status === "draft",
+          isDraft: effectiveStatus === "draft",
         },
       );
       publishedUrl = created.url;

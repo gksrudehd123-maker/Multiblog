@@ -46,7 +46,7 @@
       .filter((src) => !/\/skin\//i.test(src));
   }
 
-  function extractPost() {
+  function extractPost(mode) {
     const doc = getPostDoc();
     if (!doc) return null;
 
@@ -61,6 +61,9 @@
     const blogId = match ? match[1] : "";
     const logNo = match ? match[2] : "";
 
+    // 참고용(REFERENCE) 모드: 이미지 수집 안 함 — 저작권/SEO 리스크 회피
+    const isReference = mode === "REFERENCE";
+
     return {
       naverUrl: url,
       naverBlogId: blogId,
@@ -68,30 +71,23 @@
       title: (titleEl.innerText || titleEl.textContent || "").trim(),
       contentHtml: contentEl.innerHTML,
       contentText: (contentEl.innerText || contentEl.textContent || "").trim(),
-      images: extractImages(contentEl),
+      images: isReference ? [] : extractImages(contentEl),
       tags: extractTags(doc, logNo),
+      mode: isReference ? "REFERENCE" : "OWN",
     };
   }
 
-  function injectButton() {
-    if (document.getElementById("multiblog-send-btn")) return;
-
-    // 본문 로드 확인 (iframe 지연 대응)
-    const preview = extractPost();
-    if (!preview || !preview.title) {
-      return false; // 다시 시도
-    }
-
+  function makeButton({ id, label, bg, bottom, mode }) {
     const btn = document.createElement("button");
-    btn.id = "multiblog-send-btn";
-    btn.textContent = "📤 MultiBlog 전송";
+    btn.id = id;
+    btn.textContent = label;
     btn.style.cssText = `
       position: fixed;
-      bottom: 24px;
+      bottom: ${bottom}px;
       right: 24px;
       z-index: 99999;
       padding: 12px 18px;
-      background: #2563eb;
+      background: ${bg};
       color: #fff;
       border: none;
       border-radius: 999px;
@@ -99,25 +95,68 @@
       box-shadow: 0 4px 16px rgba(0,0,0,0.18);
       cursor: pointer;
     `;
-
     btn.addEventListener("click", async () => {
-      const payload = extractPost();
+      const payload = extractPost(mode);
       if (!payload || !payload.title) {
         alert("본문을 찾지 못했습니다. 블로그 글 상세 페이지에서 눌러주세요.");
         return;
       }
+      const originalLabel = btn.textContent;
       btn.disabled = true;
       btn.textContent = "전송 중...";
       chrome.runtime.sendMessage({ type: "SEND_POST", payload }, (res) => {
         btn.disabled = false;
-        btn.textContent = "📤 MultiBlog 전송";
+        btn.textContent = originalLabel;
         if (res && res.ok) {
-          alert("전송 완료! (제목: " + payload.title + ")");
+          alert(
+            (mode === "REFERENCE" ? "[참고용] " : "[내 블로그] ") +
+              "전송 완료! (제목: " +
+              payload.title +
+              ")",
+          );
         } else {
           alert("전송 실패: " + (res && res.error));
         }
       });
     });
+    return btn;
+  }
+
+  function injectButton(myBlogIds) {
+    if (
+      document.getElementById("multiblog-send-btn-own") ||
+      document.getElementById("multiblog-send-btn-ref")
+    )
+      return true;
+
+    // 본문 로드 확인 (iframe 지연 대응)
+    const preview = extractPost("OWN");
+    if (!preview || !preview.title) {
+      return false; // 다시 시도
+    }
+
+    // 현재 blogId가 "내 블로그 ID" 목록에 있으면 OWN 버튼만, 아니면 REFERENCE 버튼만
+    const isMine =
+      preview.naverBlogId &&
+      myBlogIds.some(
+        (id) => id.toLowerCase() === preview.naverBlogId.toLowerCase(),
+      );
+
+    const btn = isMine
+      ? makeButton({
+          id: "multiblog-send-btn-own",
+          label: "📤 내 블로그 전송",
+          bg: "#2563eb",
+          bottom: 24,
+          mode: "OWN",
+        })
+      : makeButton({
+          id: "multiblog-send-btn-ref",
+          label: "📝 참고용 전송 (이미지X)",
+          bg: "#6b7280",
+          bottom: 24,
+          mode: "REFERENCE",
+        });
 
     document.body.appendChild(btn);
     return true;
@@ -128,12 +167,15 @@
     location.hostname === "blog.naver.com" ||
     location.hostname === "m.blog.naver.com"
   ) {
-    let attempts = 0;
-    const timer = setInterval(() => {
-      attempts += 1;
-      if (injectButton() || attempts >= 20) {
-        clearInterval(timer);
-      }
-    }, 500);
+    chrome.storage.sync.get(["myBlogIds"], (cfg) => {
+      const myBlogIds = Array.isArray(cfg.myBlogIds) ? cfg.myBlogIds : [];
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts += 1;
+        if (injectButton(myBlogIds) || attempts >= 20) {
+          clearInterval(timer);
+        }
+      }, 500);
+    });
   }
 })();

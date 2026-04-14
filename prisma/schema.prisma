@@ -24,6 +24,11 @@ enum PublishStatus {
   FAILED // 실패
 }
 
+enum SourceMode {
+  OWN // 내 블로그 — 이미지 포함, 일반 리라이트
+  REFERENCE // 참고용 — 이미지 제외, inspiration 기반 재작성, 자동 draft 강제
+}
+
 // 네이버 원본 포스트 (크롬 확장프로그램에서 캡처)
 model SourcePost {
   id          String   @id @default(cuid())
@@ -35,6 +40,7 @@ model SourcePost {
   contentText String?  @db.Text // 텍스트만 추출 (AI 입력용)
   images      String[] // 원본 이미지 URL 목록
   tags        String[] // 태그
+  mode        SourceMode @default(OWN) // OWN: 내 블로그, REFERENCE: 참고용(이미지 제외/자동 draft)
   capturedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
 

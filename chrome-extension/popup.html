@@ -51,6 +51,12 @@
     <input id="serverUrl" placeholder="http://localhost:3000" />
     <label>Webhook Secret</label>
     <input id="webhookSecret" type="password" placeholder="서버 .env의 값" />
+    <label>내 블로그 ID (쉼표 구분)</label>
+    <input
+      id="myBlogIds"
+      placeholder="예: hkdong0694, myblog2"
+      title="이 목록에 있는 blogId는 '내 블로그 전송', 나머지는 '참고용 전송'만 표시"
+    />
     <button id="saveBtn">저장</button>
     <div id="status" class="status"></div>
     <script src="popup.js"></script>

@@ -11,6 +11,7 @@ type Post = {
   capturedAt: string;
   images: string[];
   tags: string[];
+  mode: "OWN" | "REFERENCE";
   publishes: {
     id: string;
     platform: string;
@@ -114,6 +115,11 @@ export default function Home() {
                   <div className="flex items-start justify-between gap-4">
                     <Link href={`/posts/${p.id}`} className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
+                        {p.mode === "REFERENCE" && (
+                          <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                            참고용
+                          </span>
+                        )}
                         <h3 className="truncate font-medium text-slate-900">
                           {p.title}
                         </h3>
