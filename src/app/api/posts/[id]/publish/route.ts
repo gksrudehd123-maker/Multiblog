@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { rewritePost, CLAUDE_MODEL } from "@/lib/claude";
+import { rewritePostWithModel, DEFAULT_MODEL_ID } from "@/lib/ai";
 import { processImageForPlatform } from "@/lib/image-processor";
 import { uploadToImgbb } from "@/lib/imgbb";
 import {
@@ -22,11 +22,14 @@ export async function POST(
     platformConfigId,
     status = "draft",
     promptTemplateId,
+    modelId,
   } = body as {
     platformConfigId: string;
     status?: "draft" | "publish";
     promptTemplateId?: string;
+    modelId?: string;
   };
+  const effectiveModelId = modelId || DEFAULT_MODEL_ID;
 
   if (!platformConfigId) {
     return NextResponse.json(
@@ -84,14 +87,17 @@ export async function POST(
     const isReference = source.mode === "REFERENCE";
     const effectiveStatus = isReference ? "draft" : status;
 
-    const rewritten = await rewritePost({
-      title: source.title,
-      contentText: source.contentText || source.contentHtml,
-      platform: config.platform as "WORDPRESS" | "BLOGSPOT" | "TISTORY",
-      imageUrls: isReference ? [] : source.images,
-      customPrompt,
-      mode: isReference ? "REFERENCE" : "OWN",
-    });
+    const { output: rewritten } = await rewritePostWithModel(
+      {
+        title: source.title,
+        contentText: source.contentText || source.contentHtml,
+        platform: config.platform as "WORDPRESS" | "BLOGSPOT" | "TISTORY",
+        imageUrls: isReference ? [] : source.images,
+        customPrompt,
+        mode: isReference ? "REFERENCE" : "OWN",
+      },
+      effectiveModelId,
+    );
 
     // 2. 이미지 가공 + 플랫폼별 업로드
     const processedImages: {
@@ -172,7 +178,7 @@ export async function POST(
         metaDescription: rewritten.metaDescription,
         slug: rewritten.slug,
         images: processedImages,
-        model: CLAUDE_MODEL,
+        model: effectiveModelId,
       },
     });
 

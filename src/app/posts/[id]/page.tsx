@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { AI_MODELS } from "@/lib/ai-models";
 
 type Publish = {
   id: string;
@@ -65,6 +66,7 @@ export default function PostDetailPage() {
   >([]);
   const [selectedConfigId, setSelectedConfigId] = useState("");
   const [selectedPromptId, setSelectedPromptId] = useState("");
+  const [selectedModelId, setSelectedModelId] = useState("gemini-2.0-flash");
   const [publishStatus, setPublishStatus] = useState<"draft" | "publish">(
     "draft",
   );
@@ -94,6 +96,15 @@ export default function PostDetailPage() {
     load();
   }, [load]);
 
+  // 마지막 선택한 AI 모델 기억
+  useEffect(() => {
+    const saved = localStorage.getItem("multiblog:lastModelId");
+    if (saved) setSelectedModelId(saved);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("multiblog:lastModelId", selectedModelId);
+  }, [selectedModelId]);
+
   const handlePublish = async () => {
     if (!selectedConfigId) {
       alert("플랫폼을 선택하세요");
@@ -109,6 +120,7 @@ export default function PostDetailPage() {
           platformConfigId: selectedConfigId,
           status: publishStatus,
           promptTemplateId: selectedPromptId || undefined,
+          modelId: selectedModelId,
         }),
       });
       const json = await res.json();
@@ -241,6 +253,22 @@ export default function PostDetailPage() {
                   {prompts.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-slate-600">
+                  AI 모델
+                </label>
+                <select
+                  value={selectedModelId}
+                  onChange={(e) => setSelectedModelId(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  {AI_MODELS.map((m) => (
+                    <option key={m.id} value={m.id} title={m.description}>
+                      {m.label}
                     </option>
                   ))}
                 </select>
