@@ -12,18 +12,11 @@ export type AiModelOption = {
 
 export const AI_MODELS: AiModelOption[] = [
   {
-    id: "gemini-2.0-flash",
-    label: "Gemini 2.0 Flash (무료)",
+    id: "gemini-2.5-flash-lite",
+    label: "Gemini 2.5 Flash Lite (무료·추천)",
     provider: "gemini",
     tier: "free",
-    description: "무료 · 한국어 양호 · 속도 빠름",
-  },
-  {
-    id: "gemini-1.5-flash",
-    label: "Gemini 1.5 Flash (무료)",
-    provider: "gemini",
-    tier: "free",
-    description: "무료 · 안정적",
+    description: "무료 · 최신 경량 · 쿼터 여유",
   },
   {
     id: "claude-sonnet-4-6",

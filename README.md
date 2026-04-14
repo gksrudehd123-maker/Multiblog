@@ -114,8 +114,11 @@ Blogspot 토큰 자동 갱신 시 새 `accessToken`과 `expiryDate`가 DB에 저
 - [x] 플랫폼별 기본 프롬프트 (`PlatformConfig.extra.promptTemplate`) — 템플릿 미선택 시 fallback
 - [x] 이미지 프록시 (`/api/proxy-image`) — 네이버 Referer 차단 우회, 도메인 화이트리스트
 - [x] **WordPress E2E 검증 완료** — Claude 리라이트 + 이미지 9개 삽입 + WP 초안 생성 성공
+- [x] **참고용(REFERENCE) 수집 모드** — 크롬 확장에 "내 블로그 ID" 설정, 내 블로그는 "내 블로그 전송"(이미지 포함·리라이트), 타인 블로그는 "참고용 전송"(이미지 제외·완전 새로 작성·자동 draft)
+- [x] **AI 모델 선택(Gemini/Claude)** — 배포 시 드롭다운, localStorage 기억. Gemini 2.5 Flash Lite 무료로 기본 제공, Claude Sonnet/Opus/Haiku 유료 선택 가능
 - [ ] Vercel 배포 + 환경변수 등록
 - [ ] **크롬 확장프로그램을 `multiblog-extension` 별도 저장소로 분리**
+- [ ] **수집 대상 플랫폼 확장** — 현재 네이버 블로그 전용. Blogspot / Tistory / WordPress 등 타 블로그 글도 크롬 확장으로 수집 가능하게 플랫폼별 셀렉터 + `manifest.json` matches 확장 필요. WordPress는 테마 편차 때문에 범용 `<article>` fallback 셀렉터가 최선(성공률 70~80% 예상)
 
 ### Phase 2 — Blogspot 완성
 

@@ -66,7 +66,9 @@ export default function PostDetailPage() {
   >([]);
   const [selectedConfigId, setSelectedConfigId] = useState("");
   const [selectedPromptId, setSelectedPromptId] = useState("");
-  const [selectedModelId, setSelectedModelId] = useState("gemini-2.0-flash");
+  const [selectedModelId, setSelectedModelId] = useState(
+    "gemini-2.5-flash-lite",
+  );
   const [publishStatus, setPublishStatus] = useState<"draft" | "publish">(
     "draft",
   );
