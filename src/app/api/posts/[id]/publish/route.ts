@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rewritePost, CLAUDE_MODEL } from "@/lib/claude";
-import { processImage } from "@/lib/image-processor";
+import { processImageForPlatform } from "@/lib/image-processor";
+import { uploadToImgbb } from "@/lib/imgbb";
 import {
   createPost as wpCreatePost,
   uploadMedia as wpUploadMedia,
@@ -100,8 +101,12 @@ export async function POST(
       for (let idx = 0; idx < source.images.length; idx += 1) {
         const imgUrl = source.images[idx];
         try {
-          const { buffer, mimeType } = await processImage(imgUrl);
-          const filename = `img-${Date.now()}-${idx}.jpg`;
+          const { buffer, mimeType } = await processImageForPlatform(
+            imgUrl,
+            "WORDPRESS",
+          );
+          const ext = mimeType === "image/webp" ? "webp" : "jpg";
+          const filename = `img-${Date.now()}-${idx}.${ext}`;
           const uploaded = await wpUploadMedia(
             {
               siteUrl: config.siteUrl,
@@ -117,7 +122,6 @@ export async function POST(
             uploadedUrl: uploaded.source_url,
             uploadedId: uploaded.id,
           });
-          // 본문에 원본 URL이 있으면 업로드 URL로 치환
           finalHtml = finalHtml.replaceAll(imgUrl, uploaded.source_url);
         } catch (e) {
           processedImages.push({
@@ -127,26 +131,21 @@ export async function POST(
         }
       }
     } else if (config.platform === "BLOGSPOT") {
-      // Blogspot은 이미지 업로드 API 없음 → sharp로 리사이즈/압축 후 base64 인라인
-      // Blogger 포스트 1MB 제한 → 각 이미지 ~80KB 이하 유지
-      const sharp = (await import("sharp")).default;
+      // Blogspot은 Blogger API에 이미지 업로드 엔드포인트가 없음 → imgbb에 업로드 후 URL 삽입
+      // WP와 다른 변형 프리셋 적용해서 구글 이미지 중복 탐지 회피
       for (let i = 0; i < source.images.length; i += 1) {
         const imgUrl = source.images[i];
         try {
-          const { buffer } = await processImage(imgUrl, {
-            resizeScale: 1,
-          });
-          // processImage는 sharp 처리 완료 상태. 추가 압축을 위해 다시 파이프
-          const compressed = await sharp(buffer)
-            .resize({ width: 800, withoutEnlargement: true })
-            .jpeg({ quality: 72, mozjpeg: true })
-            .toBuffer();
-          const dataUri = `data:image/jpeg;base64,${compressed.toString("base64")}`;
+          const { buffer } = await processImageForPlatform(imgUrl, "BLOGSPOT");
+          const uploaded = await uploadToImgbb(
+            buffer,
+            `blogspot-${Date.now()}-${i}`,
+          );
           processedImages.push({
             original: imgUrl,
-            uploadedUrl: "(inline base64)",
+            uploadedUrl: uploaded.url,
           });
-          finalHtml = finalHtml.replaceAll(imgUrl, dataUri);
+          finalHtml = finalHtml.replaceAll(imgUrl, uploaded.url);
         } catch (e) {
           processedImages.push({
             original: imgUrl,

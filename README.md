@@ -73,7 +73,7 @@ multiblog/
 5. `RewrittenVersion` 저장 (최종 HTML, 이미지 매핑, 사용 모델 기록)
 6. 플랫폼 어댑터 호출:
    - **WordPress**: `createPost` (draft/publish)
-   - **Blogspot**: accessToken 만료 시 `refreshAccessToken` 후 `createPost` (isDraft)
+   - **Blogspot**: accessToken 만료 시 `refreshAccessToken` 후 `createPost` (isDraft). 이미지는 imgbb에 업로드 후 직링크 URL로 삽입 (Blogger API에 이미지 업로드 엔드포인트 없음)
 7. `PublishTarget` → `SUCCESS` + `publishedUrl`. 실패 시 `FAILED` + `errorMessage`
 
 Blogspot 토큰 자동 갱신 시 새 `accessToken`과 `expiryDate`가 DB에 저장됩니다.
@@ -120,9 +120,10 @@ Blogspot 토큰 자동 갱신 시 새 `accessToken`과 `expiryDate`가 DB에 저
 ### Phase 2 — Blogspot 완성
 
 - [x] Blogspot 어댑터 + Blog ID/Refresh Token UI + 토큰 자동 갱신
-- [ ] **Google OAuth 자체 플로우** — 서버 자체 OAuth 로그인 + 콜백 라우트로 refresh token 획득 (현재는 외부에서 발급한 토큰 직접 입력 필요)
-- [ ] 이미지 호스팅 (Blogger API에 이미지 업로드 엔드포인트가 없음 → Cloudinary / R2 / 자체 호스팅 결정)
-- [ ] Blogspot E2E 테스트 (토큰 발급 후)
+- [x] **Google OAuth 자체 플로우** — `/api/auth/google/start` → 동의 → 콜백에서 블로그 목록 받아 선택 → `PlatformConfig` 자동 생성
+- [x] Blogspot 배포 E2E — 포스트 생성 성공
+- [x] **이미지 호스팅** — imgbb 업로드로 해결 (`src/lib/imgbb.ts`). Blogger는 base64 data URI를 렌더링 시 제거하므로 외부 호스팅 필수. imgbb는 제3자 중립 도메인이라 WP와 Blogspot이 같은 운영자의 PBN으로 탐지될 위험 없음
+- [x] **플랫폼별 이미지 변형 프리셋** — `PLATFORM_IMAGE_PRESETS` (WP=JPG/hue15, Blogspot=WebP/hue-10 등). 동일 원본 이미지라도 각 플랫폼에 서로 다른 변형본이 올라가 구글 이미지 중복 탐지(pHash) 회피
 
 ### Phase 3 — 이미지 가공 강화
 
